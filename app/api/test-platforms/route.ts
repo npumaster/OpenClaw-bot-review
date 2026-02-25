@@ -240,6 +240,101 @@ async function testDiscord(
   }
 }
 
+// Find the most recent telegram DM chat_id for a given agent
+function getTelegramDmUser(agentId: string): string | null {
+  try {
+    const sessionsPath = path.join(OPENCLAW_HOME, `agents/${agentId}/sessions/sessions.json`);
+    const raw = fs.readFileSync(sessionsPath, "utf-8");
+    const sessions = JSON.parse(raw);
+    let bestId: string | null = null;
+    let bestTime = 0;
+    for (const [key, val] of Object.entries(sessions)) {
+      const m = key.match(/^agent:[^:]+:telegram:direct:(.+)$/);
+      if (m) {
+        const updatedAt = (val as any).updatedAt || 0;
+        if (updatedAt > bestTime) {
+          bestTime = updatedAt;
+          bestId = m[1];
+        }
+      }
+    }
+    return bestId;
+  } catch {
+    return null;
+  }
+}
+
+// Telegram: call /getMe to verify bot, then send test DM
+async function testTelegram(
+  agentId: string,
+  botToken: string,
+  testChatId: string | null
+): Promise<PlatformTestResult> {
+  const startTime = Date.now();
+
+  try {
+    const meResp = await fetch(`https://api.telegram.org/bot${botToken}/getMe`, {
+      method: "GET",
+      signal: AbortSignal.timeout(15000),
+    });
+
+    const meData = await meResp.json();
+
+    if (!meResp.ok || !meData.ok || !meData.result) {
+      return {
+        agentId, platform: "telegram", ok: false,
+        error: `Telegram API error: ${meData.description || JSON.stringify(meData)}`,
+        elapsed: Date.now() - startTime,
+      };
+    }
+
+    const botName = meData.result.username ? `@${meData.result.username}` : meData.result.first_name;
+
+    if (!testChatId) {
+      return {
+        agentId, platform: "telegram", ok: true,
+        detail: `${botName} (bot reachable, no DM session found)`,
+        elapsed: Date.now() - startTime,
+      };
+    }
+
+    // Send test message
+    const now = new Date().toLocaleTimeString("zh-CN", { timeZone: "Asia/Shanghai" });
+    const msgResp = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: testChatId,
+        text: `[Platform Test] ${botName} 联通测试 ✅ (${now})`,
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+
+    const msgData = await msgResp.json();
+    const elapsed = Date.now() - startTime;
+
+    if (msgData.ok) {
+      return {
+        agentId, platform: "telegram", ok: true,
+        detail: `${botName} → DM sent (${elapsed}ms)`,
+        elapsed,
+      };
+    } else {
+      return {
+        agentId, platform: "telegram", ok: false,
+        error: `Send DM failed: ${msgData.description || JSON.stringify(msgData)}`,
+        elapsed,
+      };
+    }
+  } catch (err: any) {
+    return {
+      agentId, platform: "telegram", ok: false,
+      error: err.message,
+      elapsed: Date.now() - startTime,
+    };
+  }
+}
+
 // Agent session test: use Gateway chatCompletions API to send health check
 // When sessionKey is provided, message routes to that session (e.g. feishu DM session)
 async function testAgentSession(agentId: string, sessionKey: string | undefined, gatewayPort: number, gatewayToken: string): Promise<{ agentId: string; ok: boolean; reply?: string; error?: string; elapsed: number }> {
@@ -300,6 +395,7 @@ export async function POST() {
     const discordConfig = channels.discord || {};
     const discordAllowFrom: string[] = discordConfig.dm?.allowFrom || [];
     const discordTestUser = discordAllowFrom[0] || null;
+    const telegramConfig = channels.telegram || {};
 
     let agentList = config.agents?.list || [];
     if (agentList.length === 0) {
@@ -346,6 +442,12 @@ export async function POST() {
       // Discord: only test once
       if (id === "main" && discordConfig.enabled && discordConfig.token) {
         platformTests.push(testDiscord(id, discordConfig.token, discordTestUser));
+      }
+
+      // Telegram: only test once
+      if (id === "main" && telegramConfig.enabled && telegramConfig.botToken) {
+        const telegramTestUser = getTelegramDmUser(id);
+        platformTests.push(testTelegram(id, telegramConfig.botToken, telegramTestUser));
       }
     }
 

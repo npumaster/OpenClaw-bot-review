@@ -175,18 +175,28 @@ interface PlatformTestResult {
 
 // 平台标签颜色
 function PlatformBadge({ platform, agentId, gatewayPort, gatewayToken, t, testResult }: { platform: Platform; agentId: string; gatewayPort: number; gatewayToken?: string; t: TFunc; testResult?: PlatformTestResult | null }) {
-  const isFeishu = platform.name === "feishu";
+  const pName = platform.name;
 
   let sessionKey: string;
-  if (isFeishu && platform.botOpenId) {
+  if (pName === "feishu" && platform.botOpenId) {
     sessionKey = `agent:${agentId}:feishu:direct:${platform.botOpenId}`;
-  } else if (!isFeishu && platform.botUserId) {
+  } else if (pName === "discord" && platform.botUserId) {
     sessionKey = `agent:${agentId}:discord:direct:${platform.botUserId}`;
   } else {
     sessionKey = `agent:${agentId}:main`;
   }
   let sessionUrl = `http://localhost:${gatewayPort}/chat?session=${encodeURIComponent(sessionKey)}`;
   if (gatewayToken) sessionUrl += `&token=${encodeURIComponent(gatewayToken)}`;
+
+  const badgeStyle = pName === "feishu"
+    ? "bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/40 hover:border-blue-400"
+    : pName === "telegram"
+    ? "bg-sky-500/20 text-sky-300 border border-sky-500/30 hover:bg-sky-500/40 hover:border-sky-400"
+    : "bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/40 hover:border-purple-400";
+
+  const label = pName === "feishu" ? t("platform.feishu")
+    : pName === "telegram" ? t("platform.telegram")
+    : t("platform.discord");
 
   return (
     <div className="flex items-center gap-1.5">
@@ -196,13 +206,9 @@ function PlatformBadge({ platform, agentId, gatewayPort, gatewayToken, t, testRe
         rel="noopener noreferrer"
         onClick={(e) => e.stopPropagation()}
         title={t("agent.openChat")}
-        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium cursor-pointer transition-all hover:scale-105 hover:shadow-md ${
-          isFeishu
-            ? "bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/40 hover:border-blue-400"
-            : "bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/40 hover:border-purple-400"
-        }`}
+        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium cursor-pointer transition-all hover:scale-105 hover:shadow-md ${badgeStyle}`}
       >
-        {isFeishu ? t("platform.feishu") : t("platform.discord")}
+        {label}
         {platform.accountId && (
           <span className="opacity-60">({platform.accountId})</span>
         )}

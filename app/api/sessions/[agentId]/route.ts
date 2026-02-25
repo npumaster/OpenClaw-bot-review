@@ -29,6 +29,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ agentId
       } else if (key.includes(":discord:channel:")) {
         type = "discord-channel";
         target = key.split(":discord:channel:")[1];
+      } else if (key.includes(":telegram:direct:")) {
+        type = "telegram-dm";
+        target = key.split(":telegram:direct:")[1];
+      } else if (key.includes(":telegram:group:")) {
+        type = "telegram-group";
+        target = key.split(":telegram:group:")[1];
       } else if (key.includes(":cron:")) {
         type = "cron";
         target = key.split(":cron:")[1];

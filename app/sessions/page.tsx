@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n";
@@ -377,10 +377,18 @@ function SessionList({ agentId }: { agentId: string }) {
 }
 
 /* ── Page entry ── */
-export default function SessionsPage() {
+function SessionsPageInner() {
   const searchParams = useSearchParams();
   const agentId = searchParams.get("agent") || "";
 
   if (!agentId) return <AgentPicker />;
   return <SessionList agentId={agentId} />;
+}
+
+export default function SessionsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><p className="text-[var(--text-muted)]">Loading...</p></div>}>
+      <SessionsPageInner />
+    </Suspense>
+  );
 }

@@ -146,6 +146,7 @@ function getGroupChats(agentIds: string[], agentMap: Record<string, { emoji: str
         // 匹配群聊 session: agent:{id}:feishu:group:{groupId} 或 agent:{id}:discord:channel:{channelId}
         const feishuGroup = key.match(/^agent:[^:]+:feishu:group:(.+)$/);
         const discordGroup = key.match(/^agent:[^:]+:discord:channel:(.+)$/);
+        const telegramGroup = key.match(/^agent:[^:]+:telegram:group:(.+)$/);
         if (feishuGroup) {
           const gid = `feishu:${feishuGroup[1]}`;
           if (!groupAgents[gid]) groupAgents[gid] = { agents: new Set(), channel: "feishu" };
@@ -154,6 +155,11 @@ function getGroupChats(agentIds: string[], agentMap: Record<string, { emoji: str
         if (discordGroup) {
           const gid = `discord:${discordGroup[1]}`;
           if (!groupAgents[gid]) groupAgents[gid] = { agents: new Set(), channel: "discord" };
+          groupAgents[gid].agents.add(agentId);
+        }
+        if (telegramGroup) {
+          const gid = `telegram:${telegramGroup[1]}`;
+          if (!groupAgents[gid]) groupAgents[gid] = { agents: new Set(), channel: "telegram" };
           groupAgents[gid].agents.add(agentId);
         }
       }
@@ -321,6 +327,9 @@ export async function GET() {
           const botUserId = discordDmAllowFrom[0] || null;
           platforms.push({ name: "discord", ...(botUserId && { botUserId }) });
         }
+        if (channels.telegram?.enabled) {
+          platforms.push({ name: "telegram" });
+        }
       }
 
       // Also detect discord for non-main agents if they have discord bindings
@@ -330,6 +339,12 @@ export async function GET() {
         );
         if (discordBinding) {
           platforms.push({ name: "discord" });
+        }
+        const telegramBinding = bindings.find(
+          (b: any) => b.agentId === id && b.match?.channel === "telegram"
+        );
+        if (telegramBinding) {
+          platforms.push({ name: "telegram" });
         }
       }
 

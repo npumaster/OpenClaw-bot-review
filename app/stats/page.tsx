@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n";
@@ -193,12 +193,20 @@ function ResponseTimeChart({ data, height = 220, noDataText }: { data: DayStat[]
   );
 }
 
-export default function StatsPage() {
+function StatsPageInner() {
   const searchParams = useSearchParams();
   const agentId = searchParams.get("agent") || "";
 
   if (!agentId) return <StatsAgentPicker />;
   return <StatsDetail agentId={agentId} />;
+}
+
+export default function StatsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><p className="text-[var(--text-muted)]">Loading...</p></div>}>
+      <StatsPageInner />
+    </Suspense>
+  );
 }
 
 /* ── Agent picker (no ?agent= param) ── */
