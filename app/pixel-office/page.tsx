@@ -1149,7 +1149,7 @@ export default function PixelOfficePage() {
         {!officeReady && (
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#1a1a2e]/85 pointer-events-none">
             <div className="px-4 py-2 rounded-lg border border-[var(--border)] bg-[var(--card)] text-sm text-[var(--text-muted)]">
-              像素办公室加载中...
+              {t('common.loading')}
             </div>
           </div>
         )}
