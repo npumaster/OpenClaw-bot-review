@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
-import { OfficeState } from '@/lib/pixel-office/engine/officeState'
+import { OfficeState, type GatewaySreState } from '@/lib/pixel-office/engine/officeState'
 import { renderFrame } from '@/lib/pixel-office/engine/renderer'
 import { buildGatewayUrl } from "@/lib/gateway-url"
 import type { EditorRenderState } from '@/lib/pixel-office/engine/renderer'
@@ -170,10 +170,15 @@ const MOBILE_FIT_PADDING_PX = 2
 const MOBILE_TOP_EXTRA_TILES = 0.5
 const MOBILE_VIEW_NUDGE_Y_PX = -10
 const CODE_SNIPPET_LIFETIME_SEC = 5.5
+const SRE_BLACKWORD_MAX_FLOAT_DIST_PX = 320
 const FLOATING_TICK_INTERVAL_DESKTOP_MS = 48
 const FLOATING_TICK_INTERVAL_MOBILE_MS = 32
 const AGENT_ACTIVITY_POLL_INTERVAL_MS = 1000
 const GATEWAY_HEALTH_POLL_INTERVAL_MS = 10000
+const GATEWAY_DEGRADED_LATENCY_MS = 1500
+const GATEWAY_SRE_DOWN_FAIL_THRESHOLD = 2
+const GATEWAY_SRE_DEGRADED_THRESHOLD = 2
+const GATEWAY_SRE_RECOVERY_SUCCESS_THRESHOLD = 2
 
 let cachedOfficeState: OfficeState | null = null
 let cachedEditorState: EditorState | null = null
@@ -208,6 +213,15 @@ export default function PixelOfficePage() {
   const photographRef = useRef<HTMLImageElement | null>(null)
   const gatewayRef = useRef<{ port: number; token?: string; host?: string }>({ port: 18789 })
   const gatewayHealthyRef = useRef<boolean>(true)
+  const gatewaySreRef = useRef<{
+    status: GatewaySreState
+    error: string | null
+    responseMs: number | null
+    checkedAt: number | null
+  }>({ status: 'unknown', error: null, responseMs: null, checkedAt: null })
+  const gatewayDownStreakRef = useRef(0)
+  const gatewayDegradedStreakRef = useRef(0)
+  const gatewayHealthyStreakRef = useRef(0)
   const providersRef = useRef<Array<{ id: string; api: string; models: Array<{ id: string; name: string; contextWindow?: number }>; usedBy: Array<{ id: string; emoji: string; name: string }> }>>([])
   const [isEditMode, setIsEditMode] = useState(cachedIsEditMode)
   const [soundOn, setSoundOn] = useState(true)
@@ -225,9 +239,10 @@ export default function PixelOfficePage() {
   const [versionLoading, setVersionLoading] = useState(false)
   const [versionLoadFailed, setVersionLoadFailed] = useState(false)
   const [showIdleRank, setShowIdleRank] = useState(false)
+  const [serverTooltip, setServerTooltip] = useState<{ open: boolean; x: number; y: number }>({ open: false, x: 0, y: 0 })
   const idleRankRef = useRef<Array<{ agentId: string; onlineMinutes: number; activeMinutes: number; idleMinutes: number; idlePercent: number }> | null>(null)
   const floatingCommentsRef = useRef<Array<{ key: string; text: string; x: number; y: number; opacity: number }>>([])
-  const floatingCodeRef = useRef<Array<{ key: string; text: string; x: number; y: number; opacity: number }>>([])
+  const floatingCodeRef = useRef<Array<{ key: string; text: string; x: number; y: number; opacity: number; kind?: 'default' | 'sre' }>>([])
   const floatingTickUpdatedAtRef = useRef<number>(0)
   const [floatingTick, setFloatingTick] = useState(0)
   const [isMobileViewport, setIsMobileViewport] = useState(false)
@@ -250,6 +265,85 @@ export default function PixelOfficePage() {
     }
   }, [])
 
+  const refreshGatewayHealthSnapshot = useCallback(async () => {
+    let rawStatus: GatewaySreState = 'down'
+    let error: string | null = null
+    let responseMs: number | null = null
+    let checkedAt: number | null = null
+    try {
+      const res = await fetch('/api/gateway-health', { cache: 'no-store' })
+      const data = await res.json()
+      checkedAt = typeof data?.checkedAt === 'number' ? data.checkedAt : Date.now()
+      responseMs = typeof data?.responseMs === 'number' ? data.responseMs : null
+      error = typeof data?.error === 'string' ? data.error : null
+      if (data?.status === 'healthy' || data?.status === 'degraded' || data?.status === 'down') {
+        rawStatus = data.status
+      } else if (!data?.ok) {
+        rawStatus = 'down'
+      } else if (typeof responseMs === 'number' && responseMs > GATEWAY_DEGRADED_LATENCY_MS) {
+        rawStatus = 'degraded'
+      } else {
+        rawStatus = 'healthy'
+      }
+    } catch {
+      rawStatus = 'down'
+      error = 'fetch failed'
+      checkedAt = Date.now()
+    }
+
+    const prev = gatewaySreRef.current.status
+    let effective: GatewaySreState = prev
+
+    if (rawStatus === 'down') {
+      gatewayDownStreakRef.current += 1
+      gatewayDegradedStreakRef.current = 0
+      gatewayHealthyStreakRef.current = 0
+      if (
+        prev === 'unknown' ||
+        prev === 'down' ||
+        gatewayDownStreakRef.current >= GATEWAY_SRE_DOWN_FAIL_THRESHOLD
+      ) {
+        effective = 'down'
+      }
+    } else if (rawStatus === 'degraded') {
+      gatewayDegradedStreakRef.current += 1
+      gatewayDownStreakRef.current = 0
+      gatewayHealthyStreakRef.current = 0
+      if (
+        prev === 'unknown' ||
+        prev === 'degraded' ||
+        gatewayDegradedStreakRef.current >= GATEWAY_SRE_DEGRADED_THRESHOLD
+      ) {
+        effective = 'degraded'
+      }
+    } else {
+      gatewayHealthyStreakRef.current += 1
+      gatewayDownStreakRef.current = 0
+      gatewayDegradedStreakRef.current = 0
+      if (prev === 'down' || prev === 'degraded') {
+        if (gatewayHealthyStreakRef.current >= GATEWAY_SRE_RECOVERY_SUCCESS_THRESHOLD) {
+          effective = 'healthy'
+        }
+      } else {
+        effective = 'healthy'
+      }
+    }
+
+    gatewaySreRef.current = {
+      status: effective,
+      error,
+      responseMs,
+      checkedAt,
+    }
+    gatewayHealthyRef.current = effective !== 'down'
+    officeRef.current?.updateGatewaySreState({
+      status: effective,
+      error,
+      responseMs,
+      checkedAt,
+    })
+  }, [])
+
   useEffect(() => {
     const mql = window.matchMedia("(max-width: 767px)")
     const apply = () => setIsMobileViewport(mql.matches)
@@ -263,6 +357,7 @@ export default function PixelOfficePage() {
     const loadLayout = async () => {
       if (cachedOfficeState) {
         officeRef.current = cachedOfficeState
+        officeRef.current.updateGatewaySreState(gatewaySreRef.current)
         savedLayoutRef.current = cachedSavedLayout
         editorRef.current = cachedEditorState ?? editorRef.current
         panRef.current = cachedPan
@@ -288,6 +383,7 @@ export default function PixelOfficePage() {
         officeRef.current = new OfficeState()
       }
       cachedOfficeState = officeRef.current
+      officeRef.current?.updateGatewaySreState(gatewaySreRef.current)
       cachedSavedLayout = savedLayoutRef.current
       if (!spriteAssetsPromise) {
         spriteAssetsPromise = Promise.all([loadCharacterPNGs(), loadWallPNG()]).then(() => undefined)
@@ -442,7 +538,7 @@ export default function PixelOfficePage() {
         const containerTop = container.offsetTop
         const lifetime = 4.0
         const items: Array<{ key: string; text: string; x: number; y: number; opacity: number }> = []
-        const codeItems: Array<{ key: string; text: string; x: number; y: number; opacity: number }> = []
+        const codeItems: Array<{ key: string; text: string; x: number; y: number; opacity: number; kind?: 'default' | 'sre' }> = []
         const workingCharIds = new Set<number>()
         for (const a of agents) {
           if (a.state !== 'working') continue
@@ -471,11 +567,17 @@ export default function PixelOfficePage() {
           }
         }
         for (const ch of office.getCharacters()) {
-          if (!workingCharIds.has(ch.id)) continue
+          const isSreBlackword =
+            ch.systemRoleType === 'gateway_sre' &&
+            ch.systemStatus === 'down' &&
+            ch.state === 'idle'
+          if (!workingCharIds.has(ch.id) && !isSreBlackword) continue
           if (ch.codeSnippets.length === 0) continue
           const anchorX = ox + ch.x * zoom
-          const anchorY = containerTop + oy + (ch.y - 10) * zoom
-          const totalDist = anchorY + 24
+          const anchorY = containerTop + oy + (ch.y - (isSreBlackword ? 24 : 10)) * zoom
+          const totalDist = isSreBlackword
+            ? Math.min(anchorY + 24, SRE_BLACKWORD_MAX_FLOAT_DIST_PX)
+            : (anchorY + 24)
           for (let i = 0; i < ch.codeSnippets.length; i++) {
             const s = ch.codeSnippets[i]
             const progress = s.age / CODE_SNIPPET_LIFETIME_SEC
@@ -487,6 +589,7 @@ export default function PixelOfficePage() {
               x: anchorX + s.x * zoom,
               y: anchorY - progress * totalDist,
               opacity: Math.max(0, alpha * 0.9),
+              kind: isSreBlackword ? 'sre' : 'default',
             })
           }
         }
@@ -646,19 +749,21 @@ export default function PixelOfficePage() {
 
   // Poll gateway health for server alarm lamp in Pixel Office
   useEffect(() => {
-    const fetchGatewayHealth = async () => {
-      try {
-        const res = await fetch('/api/gateway-health', { cache: 'no-store' })
-        const data = await res.json()
-        gatewayHealthyRef.current = !!data?.ok
-      } catch {
-        gatewayHealthyRef.current = false
-      }
-    }
-    fetchGatewayHealth()
-    const interval = setInterval(fetchGatewayHealth, GATEWAY_HEALTH_POLL_INTERVAL_MS)
+    void refreshGatewayHealthSnapshot()
+    const interval = setInterval(refreshGatewayHealthSnapshot, GATEWAY_HEALTH_POLL_INTERVAL_MS)
     return () => clearInterval(interval)
-  }, [])
+  }, [refreshGatewayHealthSnapshot])
+
+  // Keep gateway SRE head label aligned with current locale.
+  useEffect(() => {
+    if (!officeReady) return
+    const office = officeRef.current
+    if (!office) return
+    const info = office.getGatewaySreInfo()
+    if (!info) return
+    const ch = office.characters.get(info.id)
+    if (ch) ch.label = t('pixelOffice.gatewaySre.name')
+  }, [officeReady, t])
 
   // ── Editor helpers ──────────────────────────────────────────
   const applyEdit = useCallback((newLayout: OfficeLayout) => {
@@ -740,6 +845,7 @@ export default function PixelOfficePage() {
     const { col, row, worldX, worldY } = mouseToTile(e.clientX, e.clientY, canvasRef.current, office, zoomRef.current, panRef.current)
 
     if (editor.isEditMode) {
+      if (serverTooltip.open) setServerTooltip((prev) => ({ ...prev, open: false }))
       // Update ghost preview
       if (editor.activeTool === EditTool.FURNITURE_PLACE) {
         const entry = getCatalogEntry(editor.selectedFurnitureType)
@@ -849,9 +955,16 @@ export default function PixelOfficePage() {
         return tileX >= f.col && tileX < f.col + entry.footprintW &&
                tileY >= f.row && tileY < f.row + entry.footprintH
       })
+      const onServer = office.layout.furniture.some(f => {
+        if (f.uid !== 'server-b-left' && f.type !== 'server_rack') return false
+        const entry = getCatalogEntry(f.type)
+        if (!entry) return false
+        return tileX >= f.col && tileX < f.col + entry.footprintW &&
+               tileY >= f.row && tileY < f.row + entry.footprintH
+      })
       const onPhoto = photographRef.current && tileX >= 10 && tileX < 17 && tileY >= -0.5 && tileY < 1
       const onHeatmap = contributionsRef.current && contributionsRef.current.username !== 'mock' && tileX >= 1 && tileX < 10 && tileY >= -0.5 && tileY < 1
-      if (canvasRef.current) canvasRef.current.style.cursor = (onCamera || onPC || onLibrary || onWhiteboard || onClock || onPhone || onSofa || id !== null || lobsterId !== null || onPhoto || onHeatmap) ? 'pointer' : 'default'
+      if (canvasRef.current) canvasRef.current.style.cursor = (onCamera || onPC || onLibrary || onWhiteboard || onClock || onPhone || onSofa || onServer || id !== null || lobsterId !== null || onPhoto || onHeatmap) ? 'pointer' : 'default'
     }
   }
 
@@ -864,9 +977,22 @@ export default function PixelOfficePage() {
     if (!editor.isEditMode) {
       // Non-edit mode: check camera click or character click
       if (e.button === 0) {
+        const rect = canvasRef.current.getBoundingClientRect()
+        const clickX = e.clientX - rect.left
+        const clickY = e.clientY - rect.top
         const { worldX, worldY } = mouseToTile(e.clientX, e.clientY, canvasRef.current, office, zoomRef.current, panRef.current)
         const tileX = worldX / TILE_SIZE
         const tileY = worldY / TILE_SIZE
+        const clickedServer = office.layout.furniture.some(f => {
+          if (f.uid !== 'server-b-left' && f.type !== 'server_rack') return false
+          const entry = getCatalogEntry(f.type)
+          if (!entry) return false
+          return tileX >= f.col && tileX < f.col + entry.footprintW &&
+                 tileY >= f.row && tileY < f.row + entry.footprintH
+        })
+        if (!clickedServer && serverTooltip.open) {
+          setServerTooltip((prev) => ({ ...prev, open: false }))
+        }
         const clickedCamera = office.layout.furniture.find(f => {
           if (f.type !== 'camera') return false
           const entry = getCatalogEntry(f.type)
@@ -944,6 +1070,10 @@ export default function PixelOfficePage() {
         })) {
           // Click on sofa — show idle rank
           setShowIdleRank(true)
+        } else if (clickedServer) {
+          // Click on server rack — show tooltip and refresh latest status
+          setServerTooltip({ open: true, x: clickX, y: clickY })
+          void refreshGatewayHealthSnapshot()
         } else if (photographRef.current && tileX >= 10 && tileX < 17 && tileY >= -0.5 && tileY < 1) {
           // Click on wall photograph — fullscreen view
           setFullscreenPhoto(true)
@@ -958,9 +1088,15 @@ export default function PixelOfficePage() {
           const charId = office.getCharacterAt(worldX, worldY)
           if (charId !== null) {
             const map = agentIdMapRef.current
+            let found = false
             for (const [aid, cid] of map.entries()) {
-              if (cid === charId) { setSelectedAgentId(aid); break }
+              if (cid === charId) {
+                setSelectedAgentId(aid)
+                found = true
+                break
+              }
             }
+            if (!found) setSelectedAgentId(null)
           } else {
             setSelectedAgentId(null)
           }
@@ -1263,24 +1399,32 @@ export default function PixelOfficePage() {
     if (agentId) {
       const agent = agents.find(a => a.agentId === agentId)
       const stats = agentStatsRef.current.get(agentId)
-      return { agent, stats, isSubagent: false as const, parentAgentId: null as string | null }
+      return { kind: 'agent' as const, agent, stats, isSubagent: false as const, parentAgentId: null as string | null }
     }
 
     const hoveredCharacter = officeRef.current?.characters.get(hoveredAgentId)
-    if (!hoveredCharacter?.isSubagent || hoveredCharacter.parentAgentId == null) return null
-    let parentAgentId: string | null = null
-    for (const [aid, cid] of map.entries()) {
-      if (cid === hoveredCharacter.parentAgentId) { parentAgentId = aid; break }
+    if (hoveredCharacter?.isSubagent && hoveredCharacter.parentAgentId != null) {
+      let parentAgentId: string | null = null
+      for (const [aid, cid] of map.entries()) {
+        if (cid === hoveredCharacter.parentAgentId) { parentAgentId = aid; break }
+      }
+      if (!parentAgentId) return null
+      const parentAgent = agents.find(a => a.agentId === parentAgentId)
+      if (!parentAgent) return null
+      return {
+        kind: 'subagent' as const,
+        agent: parentAgent,
+        stats: agentStatsRef.current.get(parentAgentId),
+        isSubagent: true as const,
+        parentAgentId,
+      }
     }
-    if (!parentAgentId) return null
-    const parentAgent = agents.find(a => a.agentId === parentAgentId)
-    if (!parentAgent) return null
-    return {
-      agent: parentAgent,
-      stats: agentStatsRef.current.get(parentAgentId),
-      isSubagent: true as const,
-      parentAgentId,
+
+    const gatewaySre = officeRef.current?.getGatewaySreInfo()
+    if (gatewaySre && gatewaySre.id === hoveredAgentId) {
+      return { kind: 'gatewaySre' as const, gatewaySre }
     }
+    return null
   }, [hoveredAgentId, agents])
 
   const hoveredInfo = getHoveredAgentInfo()
@@ -1396,7 +1540,11 @@ export default function PixelOfficePage() {
           }}>
           <span
             className="inline-block px-2 py-0.5 rounded-md text-sm font-mono font-semibold"
-            style={{ backgroundColor: 'rgba(0,0,0,0.72)', color: '#4ade80' }}
+            style={{
+              backgroundColor: fc.kind === 'sre' ? 'rgba(28,6,6,0.9)' : 'rgba(0,0,0,0.72)',
+              color: fc.kind === 'sre' ? '#DC2626' : '#4ade80',
+              border: fc.kind === 'sre' ? '1px solid rgba(127,29,29,0.85)' : '1px solid transparent',
+            }}
           >
             {fc.text}
           </span>
@@ -1491,27 +1639,99 @@ export default function PixelOfficePage() {
         </button>
 
         {/* Agent hover tooltip */}
-        {hoveredInfo && hoveredInfo.agent && !isEditMode && !selectedAgentId && !isMobileViewport && (
+        {hoveredInfo && !isEditMode && !selectedAgentId && !isMobileViewport && (
           <div className="absolute pointer-events-none z-10 px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--card)]/95 backdrop-blur-sm text-xs shadow-lg"
             style={{ left: Math.min(mousePosRef.current.x + 12, (containerRef.current?.clientWidth || 300) - 180), top: mousePosRef.current.y + 12 }}>
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <span>{hoveredInfo.agent.emoji}</span>
-              <span className="font-semibold text-[var(--text)]">{hoveredInfo.isSubagent ? '临时工' : hoveredInfo.agent.name}</span>
-            </div>
-            {hoveredInfo.isSubagent ? (
-              <div className="text-[var(--text-muted)]">
-                {(hoveredInfo.parentAgentId || 'unknown')} agent创建的subagent
-              </div>
+            {hoveredInfo.kind === 'gatewaySre' ? (
+              <>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <span>🧯</span>
+                  <span className="font-semibold text-[var(--text)]">{t('pixelOffice.gatewaySre.name')}</span>
+                </div>
+                <div className="space-y-0.5 text-[var(--text-muted)]">
+                  <div className="flex justify-between gap-4">
+                    <span>{t('pixelOffice.gatewaySre.statusLabel')}</span>
+                    <span className="text-[var(--text)]">{t(`pixelOffice.gatewaySre.status.${hoveredInfo.gatewaySre.status}`)}</span>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <span>{t('pixelOffice.gatewaySre.responseMs')}</span>
+                    <span className="text-[var(--text)]">{hoveredInfo.gatewaySre.responseMs != null ? `${hoveredInfo.gatewaySre.responseMs}ms` : '--'}</span>
+                  </div>
+                  {hoveredInfo.gatewaySre.error && (
+                    <div className="text-red-300">{hoveredInfo.gatewaySre.error}</div>
+                  )}
+                </div>
+              </>
             ) : (
-              <div className="space-y-0.5 text-[var(--text-muted)]">
-                <div className="flex justify-between gap-4"><span>{t('agent.sessionCount')}</span><span className="text-[var(--text)]">{hoveredInfo.stats?.sessionCount ?? '--'}</span></div>
-                <div className="flex justify-between gap-4"><span>{t('agent.messageCount')}</span><span className="text-[var(--text)]">{hoveredInfo.stats?.messageCount ?? '--'}</span></div>
-                <div className="flex justify-between gap-4"><span>{t('agent.tokenUsage')}</span><span className="text-[var(--text)]">{hoveredInfo.stats ? formatTokens(hoveredInfo.stats.totalTokens) : '--'}</span></div>
-                <div className="flex justify-between gap-4"><span>{t('agent.todayAvgResponse')}</span><span className="text-[var(--text)]">{hoveredInfo.stats?.todayAvgResponseMs ? `${(hoveredInfo.stats.todayAvgResponseMs / 1000).toFixed(1)}s` : '--'}</span></div>
-              </div>
+              <>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <span>{hoveredInfo.agent?.emoji}</span>
+                  <span className="font-semibold text-[var(--text)]">{hoveredInfo.isSubagent ? '临时工' : hoveredInfo.agent?.name}</span>
+                </div>
+                {hoveredInfo.isSubagent ? (
+                  <div className="text-[var(--text-muted)]">
+                    {(hoveredInfo.parentAgentId || 'unknown')} agent创建的subagent
+                  </div>
+                ) : (
+                  <div className="space-y-0.5 text-[var(--text-muted)]">
+                    <div className="flex justify-between gap-4"><span>{t('agent.sessionCount')}</span><span className="text-[var(--text)]">{hoveredInfo.stats?.sessionCount ?? '--'}</span></div>
+                    <div className="flex justify-between gap-4"><span>{t('agent.messageCount')}</span><span className="text-[var(--text)]">{hoveredInfo.stats?.messageCount ?? '--'}</span></div>
+                    <div className="flex justify-between gap-4"><span>{t('agent.tokenUsage')}</span><span className="text-[var(--text)]">{hoveredInfo.stats ? formatTokens(hoveredInfo.stats.totalTokens) : '--'}</span></div>
+                    <div className="flex justify-between gap-4"><span>{t('agent.todayAvgResponse')}</span><span className="text-[var(--text)]">{hoveredInfo.stats?.todayAvgResponseMs ? `${(hoveredInfo.stats.todayAvgResponseMs / 1000).toFixed(1)}s` : '--'}</span></div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
+
+        {/* Server click tooltip */}
+        {serverTooltip.open && !isEditMode && !selectedAgentId && !isMobileViewport && (() => {
+          const snapshot = gatewaySreRef.current
+          const status = snapshot.status === 'healthy' || snapshot.status === 'degraded' || snapshot.status === 'down'
+            ? snapshot.status
+            : 'unknown'
+          const statusColor =
+            status === 'healthy' ? 'text-green-400'
+            : status === 'degraded' ? 'text-yellow-400'
+            : status === 'down' ? 'text-red-400'
+            : 'text-[var(--text-muted)]'
+          return (
+            <div
+              className="absolute pointer-events-auto z-10 px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--card)]/95 backdrop-blur-sm text-xs shadow-lg"
+              style={{ left: Math.min(serverTooltip.x + 12, (containerRef.current?.clientWidth || 300) - 200), top: serverTooltip.y + 12 }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                className="absolute right-1.5 top-1.5 text-[10px] leading-none text-[var(--text-muted)] hover:text-[var(--text)]"
+                onClick={() => setServerTooltip((prev) => ({ ...prev, open: false }))}
+                aria-label={t('common.close')}
+                title={t('common.close')}
+              >
+                ×
+              </button>
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <span>🖥️</span>
+                <span className="font-semibold text-[var(--text)]">Gateway Server</span>
+              </div>
+              <div className="space-y-0.5 text-[var(--text-muted)]">
+                <div className="flex justify-between gap-4">
+                  <span>{t('pixelOffice.gatewaySre.statusLabel')}</span>
+                  <span className={statusColor}>{t(`pixelOffice.serverStatus.${status}`)}</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span>{t('pixelOffice.gatewaySre.responseMs')}</span>
+                  <span className="text-[var(--text)]">{snapshot.responseMs != null ? `${snapshot.responseMs}ms` : '--'}</span>
+                </div>
+                {snapshot.error && (
+                  <div className="text-red-300">{snapshot.error}</div>
+                )}
+              </div>
+            </div>
+          )
+        })()}
 
         {/* Agent detail card (click) */}
         {selectedAgentId && !isEditMode && (() => {

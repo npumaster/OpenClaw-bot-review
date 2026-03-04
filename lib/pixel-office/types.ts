@@ -208,4 +208,7 @@ export interface Character {
   codeSnippets: Array<{ text: string; age: number; x: number; y: number }>
   photoComments: Array<{ text: string; age: number; x: number }>
   isViewingPhoto: boolean
+  isSystemRole?: boolean
+  systemRoleType?: 'gateway_sre'
+  systemStatus?: 'unknown' | 'healthy' | 'degraded' | 'down'
 }

@@ -520,11 +520,27 @@ export function renderScene(
       const labelY = drawY - 2 * zoom
       const fontSize = Math.max(12, Math.round(5.25 * zoom))
       const isWorking = ch.isActive && ch.state === CharacterState.TYPE
+      const now = Date.now()
       // Blink effect for working state: use time-based alpha
-      const labelAlpha = isWorking ? 0.7 + 0.3 * Math.sin(Date.now() / 300) : 1.0
-      const labelColor = ch.isSubagent
+      const labelAlpha = isWorking ? 0.7 + 0.3 * Math.sin(now / 300) : 1.0
+      let labelColor = ch.isSubagent
         ? (isWorking ? `rgba(220,38,38,${labelAlpha})` : '#991B1B')
         : (isWorking ? `rgba(34,197,94,${labelAlpha})` : '#FFD700')
+      if (ch.systemRoleType === 'gateway_sre') {
+        const state = ch.systemStatus ?? 'unknown'
+        if (state === 'healthy') {
+          const alpha = 0.65 + 0.3 * ((Math.sin(now / 760) + 1) / 2)
+          labelColor = `rgba(34,197,94,${alpha})`
+        } else if (state === 'degraded') {
+          const alpha = 0.45 + 0.55 * ((Math.sin(now / 220) + 1) / 2)
+          labelColor = `rgba(250,204,21,${alpha})`
+        } else if (state === 'down') {
+          const alpha = 0.28 + 0.72 * ((Math.sin(now / 110) + 1) / 2)
+          labelColor = `rgba(153,27,27,${alpha})`
+        } else {
+          labelColor = '#9CA3AF'
+        }
+      }
       drawables.push({
         zY: charZY + 0.1,
         draw: (c) => {
