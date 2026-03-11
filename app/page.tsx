@@ -92,6 +92,18 @@ interface AgentActivityData {
   state: "idle" | "working" | "waiting" | "offline";
   lastActive: number;
   subagents?: SubagentInfo[];
+  cronJobs?: Array<{
+    key: string;
+    jobId: string;
+    label: string;
+    isRunning: boolean;
+    lastRunAt: number;
+    nextRunAt?: number;
+    durationMs?: number;
+    lastStatus: "success" | "running" | "failed";
+    lastSummary?: string;
+    consecutiveFailures: number;
+  }>;
 }
 
 type TFunc = (key: string) => string;
@@ -684,6 +696,7 @@ export default function Home() {
                     </div>
                     {agent.subagents && agent.subagents.length > 0 ? (
                       <div className="space-y-1">
+                        <div className="text-[10px] uppercase tracking-wide opacity-60">{t("home.agentTaskSubtasks")}</div>
                         {agent.subagents.map((sub, i) => (
                           <div key={i} className="text-xs text-[var(--text-muted)]">
                             <span className="text-[var(--accent)] mr-1">↳</span>
@@ -696,6 +709,52 @@ export default function Home() {
                       </div>
                     ) : (
                       <div className="text-xs text-[var(--text-muted)] opacity-60">{t("home.agentTaskNoSubtasks")}</div>
+                    )}
+                    {agent.cronJobs && agent.cronJobs.length > 0 ? (
+                      <div className="space-y-1 mt-2 pt-2 border-t border-[var(--border)]">
+                        <div className="text-[10px] uppercase tracking-wide opacity-60">{t("home.agentTaskCron")}</div>
+                        {agent.cronJobs.map((cron) => (
+                          <div key={cron.key} className="text-xs text-[var(--text-muted)]">
+                            <div className="flex items-center gap-2">
+                              <span className="text-yellow-400">⏰</span>
+                              <span className="font-medium text-[var(--text)]">{cron.label}</span>
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                                cron.lastStatus === "running"
+                                  ? "bg-sky-500/20 text-sky-400"
+                                  : cron.lastStatus === "failed"
+                                    ? "bg-red-500/20 text-red-400"
+                                    : "bg-emerald-500/20 text-emerald-400"
+                              }`}>
+                                {cron.lastStatus === "running"
+                                  ? t("home.agentTaskCronState.running")
+                                  : cron.lastStatus === "failed"
+                                    ? t("home.agentTaskCronState.failed")
+                                    : t("home.agentTaskCronState.success")}
+                              </span>
+                              {cron.consecutiveFailures > 0 && (
+                                <span className="text-[10px] text-red-400">
+                                  {t("home.agentTaskCronFailures")} {cron.consecutiveFailures}
+                                </span>
+                              )}
+                            </div>
+                            <div className="ml-5 opacity-70">
+                              {cron.lastSummary || t("home.agentTaskCronNoSummary")}
+                            </div>
+                            <div className="ml-5 mt-0.5 flex flex-wrap gap-x-3 gap-y-1 text-[10px] opacity-60">
+                              {cron.durationMs !== undefined && (
+                                <span>{t("home.agentTaskCronDuration")} {Math.max(1, Math.round(cron.durationMs / 1000))}s</span>
+                              )}
+                              {cron.nextRunAt ? (
+                                <span>
+                                  {t("home.agentTaskCronNextRun")} {new Date(cron.nextRunAt).toLocaleTimeString(locale === "zh" ? "zh-CN" : locale, { hour: "2-digit", minute: "2-digit" })}
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-[var(--text-muted)] opacity-60 mt-2">{t("home.agentTaskNoCron")}</div>
                     )}
                   </div>
                   <div className="text-[10px] text-[var(--text-muted)] whitespace-nowrap">
