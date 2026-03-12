@@ -170,3 +170,7 @@ npm run dev
 OPENCLAW_HOME=/opt/openclaw 
 npm run dev
 ```
+
+## 作者联系方式（contact）
+小红书：[主页](https://xhslink.com/m/AsJKWgEBt1I) 
+<br/>微信：xmanr123
