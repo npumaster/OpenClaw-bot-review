@@ -7,7 +7,7 @@ export default function AgentsPage() {
 
   return (
     <section className="space-y-4">
-      <h1 className="text-2xl font-semibold ac-title">{t("agentsTitle")}</h1>
+      <h1 className="text-xl font-semibold ac-title">{t("agentsTitle")}</h1>
       <div className="ac-panel p-5 ac-muted">
         这里是智能体业务页面占位，可接入你的后端与业务卡片。
       </div>

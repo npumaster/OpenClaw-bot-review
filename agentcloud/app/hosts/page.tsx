@@ -14,7 +14,7 @@ export default function HostsPage() {
 
   return (
     <section className="space-y-4">
-      <h1 className="text-2xl font-semibold ac-title">{t("hostsTitle")}</h1>
+      <h1 className="text-xl font-semibold ac-title">{t("hostsTitle")}</h1>
       <div className="ac-panel p-5 ac-muted">{t("hostsDesc")}</div>
       <div className="ac-panel overflow-hidden">
         <div className="overflow-x-auto">

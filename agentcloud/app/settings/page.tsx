@@ -7,7 +7,7 @@ export default function SettingsPage() {
 
   return (
     <section className="space-y-4">
-      <h1 className="text-2xl font-semibold ac-title">{t("settingsTitle")}</h1>
+      <h1 className="text-xl font-semibold ac-title">{t("settingsTitle")}</h1>
       <div className="ac-panel p-5 ac-muted">
         这里是设置页面占位，可扩展主题、权限、通知等配置能力。
       </div>

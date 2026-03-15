@@ -40,7 +40,7 @@ export default function FinancePage() {
 
   return (
     <section className="space-y-4">
-      <h1 className="text-2xl font-semibold ac-title">{t("financeTitle")}</h1>
+      <h1 className="text-xl font-semibold ac-title">{t("financeTitle")}</h1>
       <div className="ac-panel p-5 ac-muted">{t("financeDesc")}</div>
       <div className="ac-panel overflow-hidden">
         <div className="overflow-x-auto">
