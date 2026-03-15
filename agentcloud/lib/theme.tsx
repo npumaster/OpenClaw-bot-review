@@ -15,9 +15,17 @@ const ThemeContext = createContext<{
 });
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("dark");
+  const [theme, setThemeState] = useState<Theme>(() => {
+    if (typeof document === "undefined") return "dark";
+    return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+  });
 
   useEffect(() => {
+    const current = document.documentElement.getAttribute("data-theme");
+    if (current === "light" || current === "dark") {
+      setThemeState(current);
+      return;
+    }
     const saved = localStorage.getItem("agentcloud-theme");
     const nextTheme: Theme = saved === "light" ? "light" : "dark";
     setThemeState(nextTheme);
