@@ -8,7 +8,7 @@ const messages = {
   zh: {
     appName: "AgentCloud",
     appSubtitle: "Control Center",
-    navHome: "总览",
+    navHome: "首页",
     navHosts: "主机",
     navFinance: "财务",
     navAgents: "智能体",
