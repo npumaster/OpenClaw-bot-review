@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { LanguageSwitcher, useI18n } from "@/lib/i18n";
 import { ThemeSwitcher } from "@/lib/theme";
 
-type NavKey = "navHome" | "navAgents" | "navSettings";
+type NavKey = "navHome" | "navHosts" | "navFinance" | "navAgents" | "navSettings";
 type NavGroupKey = "navOverview" | "navConfig";
 
 const navGroups: Array<{ group: NavGroupKey; items: Array<{ href: string; key: NavKey; icon: string }> }> = [
@@ -14,7 +14,9 @@ const navGroups: Array<{ group: NavGroupKey; items: Array<{ href: string; key: N
     group: "navOverview",
     items: [
       { href: "/", key: "navHome", icon: "🏠" },
+      { href: "/hosts", key: "navHosts", icon: "🖥️" },
       { href: "/agents", key: "navAgents", icon: "🤖" },
+      { href: "/finance", key: "navFinance", icon: "💰" },
     ],
   },
   {

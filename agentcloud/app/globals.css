@@ -91,9 +91,9 @@ a {
 
 .ac-panel {
   border: 1px solid var(--border);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--card) 92%, white 0%), var(--card-2));
+  background: var(--card);
   border-radius: 14px;
-  box-shadow: var(--shadow-lg), var(--ring);
+  box-shadow: 0 10px 24px rgba(2, 8, 20, 0.2), var(--ring);
 }
 
 .ac-title {
