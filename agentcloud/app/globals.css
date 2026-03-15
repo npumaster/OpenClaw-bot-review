@@ -1,0 +1,164 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #0b1220;
+  --bg-soft: #111a2d;
+  --card: #161f34;
+  --card-2: #1c2740;
+  --border: #2e3d5c;
+  --text: #f3f7ff;
+  --text-muted: #9fb0d1;
+  --accent: #4cc9f0;
+  --accent-2: #8b5cf6;
+  --success: #34d399;
+  --warning: #f59e0b;
+  --shadow-lg: 0 18px 42px rgba(1, 8, 24, 0.36);
+  --ring: 0 0 0 1px rgba(76, 201, 240, 0.18);
+}
+
+[data-theme="light"] {
+  --bg: #f2f6ff;
+  --bg-soft: #e8eefb;
+  --card: #ffffff;
+  --card-2: #f8fbff;
+  --border: #d6deef;
+  --text: #0b1220;
+  --text-muted: #52607a;
+  --accent: #0b75c9;
+  --accent-2: #6d5ef9;
+  --success: #0f9b64;
+  --warning: #b7791f;
+  --shadow-lg: 0 18px 36px rgba(22, 35, 68, 0.12);
+  --ring: 0 0 0 1px rgba(11, 117, 201, 0.16);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background-image:
+    radial-gradient(1000px 420px at 0% -10%, color-mix(in srgb, var(--accent) 16%, transparent), transparent),
+    radial-gradient(900px 380px at 100% -20%, color-mix(in srgb, var(--accent-2) 14%, transparent), transparent);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.ac-shell {
+  min-height: 100vh;
+  width: 100%;
+}
+
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--card) 92%, black), var(--card-2));
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.03), 10px 0 30px rgba(2, 8, 20, 0.26);
+  z-index: 40;
+  transition: width 0.2s ease;
+}
+
+.sidebar-nav {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.ac-main {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  padding: 28px;
+}
+
+.ac-content {
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+}
+
+.ac-panel {
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--card) 92%, white 0%), var(--card-2));
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg), var(--ring);
+}
+
+.ac-title {
+  letter-spacing: 0.01em;
+  line-height: 1.15;
+}
+
+.ac-chip {
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: color-mix(in srgb, var(--accent) 50%, var(--text));
+  border-radius: 9999px;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.ac-action-btn {
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-soft) 80%, var(--card));
+  color: var(--text);
+  border-radius: 10px;
+  padding: 0.38rem 0.65rem;
+  transition: all 0.2s ease;
+}
+
+.ac-action-btn:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  transform: translateY(-1px);
+}
+
+.ac-nav-link {
+  display: block;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.62rem 0.78rem;
+  transition: all 0.2s ease;
+}
+
+.ac-nav-link:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  color: var(--text);
+  transform: translateX(2px);
+}
+
+.ac-nav-link-active {
+  border-color: color-mix(in srgb, var(--accent) 78%, var(--border));
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent) 24%, transparent),
+    color-mix(in srgb, var(--accent-2) 18%, transparent)
+  );
+  color: var(--text);
+}
+
+.ac-muted {
+  color: var(--text-muted);
+}
+
+@media (max-width: 980px) {
+  .ac-main {
+    padding: 14px;
+  }
+
+  .ac-content {
+    max-width: none;
+  }
+}
