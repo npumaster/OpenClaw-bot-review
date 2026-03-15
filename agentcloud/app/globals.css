@@ -41,7 +41,7 @@ body {
   min-height: 100vh;
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: "Noto Sans CJK TC", "Source Han Sans", "PingFang TC", "Microsoft JhengHei", sans-serif;
   background-image:
     radial-gradient(1000px 420px at 0% -10%, color-mix(in srgb, var(--accent) 16%, transparent), transparent),
     radial-gradient(900px 380px at 100% -20%, color-mix(in srgb, var(--accent-2) 14%, transparent), transparent);

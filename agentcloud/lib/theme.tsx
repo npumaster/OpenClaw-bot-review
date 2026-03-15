@@ -15,10 +15,7 @@ const ThemeContext = createContext<{
 });
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(() => {
-    if (typeof document === "undefined") return "dark";
-    return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
-  });
+  const [theme, setThemeState] = useState<Theme>("dark");
 
   useEffect(() => {
     const current = document.documentElement.getAttribute("data-theme");
@@ -51,6 +48,24 @@ export function useTheme() {
 
 export function ThemeSwitcher() {
   const { theme, toggleTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return (
+      <button
+        onClick={toggleTheme}
+        className="ac-action-btn text-sm cursor-pointer"
+        title="切换主题"
+      >
+        🌓
+      </button>
+    );
+  }
+
   return (
     <button
       onClick={toggleTheme}
